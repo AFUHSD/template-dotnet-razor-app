@@ -1,0 +1,35 @@
+# Build output
+bin/
+obj/
+publish/
+artifacts/
+TestResults/
+*.trx
+coverage*.xml
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Local configuration and secrets: only appsettings.Example.json documents real keys
+appsettings.*.local.json
+appsettings.Local.json
+*.pfx
+*.pem
+.env
+secrets.json
+
+# Data never belongs in a template or an app repo
+*.csv
+*.xlsx
+*.eml
+*.bak
+*.mdf
+*.ldf
+
+# OS
+.DS_Store
+Thumbs.db

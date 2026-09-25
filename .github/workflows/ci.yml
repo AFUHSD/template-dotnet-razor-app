@@ -1,0 +1,26 @@
+# Thin caller for the organization's reusable CI library. The build/test logic lives there, not here.
+# Required status checks (for rulesets): "ci / afuhsd-ci" and "security / security-scan".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: AFUHSD/.github/.github/workflows/reusable-afuhsd-ci.yml@main
+    with:
+      warnings-as-errors: true    # the template builds with zero warnings; keep it that way
+      # os: windows               # only if tests need Windows APIs
+      # sql-guards: fail          # once every manual-run script is pinned
+  security:
+    uses: AFUHSD/.github/.github/workflows/reusable-security-scan.yml@main

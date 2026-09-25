@@ -1,0 +1,55 @@
+@using App.Web.Options
+@using Microsoft.Extensions.Options
+@inject IOptions<AuthOptions> Auth
+@{
+    var nav = ViewData["Nav"] as string;
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var logoutPath = Auth.Value.UsePlatformLogin ? Auth.Value.PlatformLogoutPath : null;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"] &middot; My App</title>
+    @* Under a sub-path the browser's implicit /favicon.ico request goes to the PARENT site, so link it
+       explicitly. Static assets use ~/, which resolves through PathBase. In a DYNAMIC href (built from a
+       variable) ~/ is not rewritten: use Url.Content(...) there. *@
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    @* First focusable element, so keyboard users can bypass the header (WCAG 2.1 SC 2.4.1). *@
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <header class="site-header">
+        <a class="site-name" asp-page="/Index">My App</a>
+        <nav aria-label="Main">
+            <ul>
+                <li><a asp-page="/Index" aria-current="@(nav == "home" ? "page" : null)">Home</a></li>
+                <li><a asp-page="/Staff/Help" aria-current="@(nav == "help" ? "page" : null)">Help</a></li>
+            </ul>
+        </nav>
+        @if (signedIn)
+        {
+            <p class="site-user">
+                Signed in as <strong>@User.Identity!.Name</strong>
+                @if (!string.IsNullOrWhiteSpace(logoutPath))
+                {
+                    @* Origin-absolute on purpose: sign-out belongs to the platform sign-in app, outside PathBase. *@
+                    <a href="@logoutPath">Sign out</a>
+                }
+            </p>
+        }
+    </header>
+
+    <main id="main" tabindex="-1">
+        @RenderBody()
+    </main>
+
+    <footer class="site-footer">
+        <p>Questions or problems? See <a asp-page="/Staff/Help">Help</a>.</p>
+    </footer>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
