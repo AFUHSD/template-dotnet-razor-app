@@ -1,35 +1,45 @@
-# Majors are ignored: a major bump is migration work a person schedules. Ignore rules do not suppress
-# Dependabot security ALERTS. The cooldown lets a fresh release settle for two days before a PR opens.
+# Dependabot for AFUHSD/template-dotnet-razor-app.
+#
+# THE GROUP MATCHES ON `patterns` ONLY -- deliberately no `update-types` filter.
+# `update-types` works for ordinary version bumps, but it does NOT match a
+# REQUIREMENT update (changing a `>=` or `<` constraint), because no semver
+# update-type is computed for one. af-openclaw had an all-`>=` requirements
+# file, and Dependabot's first run there opened THREE separate PRs against that
+# one file, each branched from the same base: whichever two merged first, the
+# third was left in conflict -- and that would have recurred every week.
+#
+# Dropping the filter is safe because majors are ignored below, so "group
+# everything" and "group minor and patch" describe the same set of updates.
+# The group keeps the name `minor-and-patch` so Dependabot treats an existing
+# grouped PR as the same group rather than closing it and opening a new one.
+#
+# Majors are ignored on purpose: a major bump is migration work a person
+# schedules, reviewed in its own PR. Ignore rules do NOT suppress Dependabot
+# security alerts. The cooldown lets a fresh release settle for two days.
 version: 2
 updates:
-  - package-ecosystem: nuget
-    directory: /
+  - package-ecosystem: "nuget"
+    directory: "/"
     schedule:
-      interval: weekly
-    cooldown:
-      default-days: 2
+      interval: "weekly"
     groups:
       minor-and-patch:
-        update-types:
-          - minor
-          - patch
+        patterns: ["*"]
     ignore:
       - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 2
 
-  - package-ecosystem: github-actions
-    directory: /
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-      interval: weekly
-    cooldown:
-      default-days: 2
+      interval: "weekly"
     groups:
       minor-and-patch:
-        update-types:
-          - minor
-          - patch
+        patterns: ["*"]
     ignore:
       - dependency-name: "*"
-        update-types:
-          - version-update:semver-major
+        update-types: ["version-update:semver-major"]
+    cooldown:
+      default-days: 2
