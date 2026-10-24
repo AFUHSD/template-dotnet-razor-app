@@ -14,12 +14,15 @@ var builder = WebApplication.CreateBuilder(args);
 // (Section__Key). Nothing about a particular server or organization belongs in source.
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<AccessOptions>(builder.Configuration.GetSection(AccessOptions.SectionName));
-// Validated at startup: a zero window or count would silently switch the rate limit off, so it is refused
-// loudly instead (the process does not start, and the message names the keys).
+// Validated at startup, loudly (the process does not start, and the message names the key): a zero window
+// or count would silently switch the rate limit off, and a relative or non-HTTP intake URL would select the
+// HTTP sink and then fail every submission with a 500.
 builder.Services.AddOptions<FeedbackOptions>()
     .Bind(builder.Configuration.GetSection(FeedbackOptions.SectionName))
     .Validate(o => o.MaxPerWindow > 0 && o.WindowMinutes > 0,
         "Feedback__MaxPerWindow and Feedback__WindowMinutes must both be greater than zero.")
+    .Validate(o => o.ServiceHubIntakeUrl is null || o.HasUsableIntakeUrl,
+        "Feedback__ServiceHubIntakeUrl must be an absolute http or https URL.")
     .ValidateOnStart();
 var auth =builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
 

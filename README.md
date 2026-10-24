@@ -133,9 +133,11 @@ through `IEventLog` with status `Sent` or `Failed`, the identity, and a detail o
 `screenshot` (bool) and `messageLength`. **Never the message text.** Implement `IEventLog` against your
 organization's store and the row lands there.
 
-**Rate-limit settings are validated at startup.** `Feedback__MaxPerWindow` and `Feedback__WindowMinutes`
-must both be above zero; a zero window would admit everything, so the process refuses to start and names
-the keys instead.
+**Settings are validated at startup.** `Feedback__MaxPerWindow` and `Feedback__WindowMinutes` must both be
+above zero (a zero window would admit everything), and `Feedback__ServiceHubIntakeUrl`, when set, must be an
+absolute `http`/`https` URL (anything else would select the HTTP sink and fail every submission). The
+process refuses to start and names the key instead. The sink reports "sent" only on the documented
+`201 { ticketId }`; any other successful-looking answer is a failure the person sees.
 
 **Feature flag.** `Feedback__Enabled` unset means on in Development and off everywhere else, so a deployed app
 shows the control only when the host says `true`. Rollback is removing the flag: the partial, the endpoint and

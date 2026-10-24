@@ -66,8 +66,16 @@ public sealed partial class ServiceHubFeedbackSink(
             using var response = await http.SendAsync(request, ct);
             if (response.IsSuccessStatusCode)
             {
-                var created = await response.Content.ReadFromJsonAsync<IntakeResponse>(Json, ct);
-                return FeedbackSinkResult.Ok(Name, created?.TicketId?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                // Only the documented answer counts as filed: 201 with a ticket number. A proxy's 200 page or
+                // a changed upstream shape must not be reported to the person as "sent".
+                var created = response.StatusCode == System.Net.HttpStatusCode.Created
+                    ? await response.Content.ReadFromJsonAsync<IntakeResponse>(Json, ct)
+                    : null;
+                if (created?.TicketId is long ticketId)
+                    return FeedbackSinkResult.Ok(Name, ticketId.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+                LogRejected(logger, (int)response.StatusCode);
+                return FeedbackSinkResult.Failed(Name, "The help desk answered without a ticket number.");
             }
 
             // The intake's error text is written for the requester ("no help-desk account"); pass it on.

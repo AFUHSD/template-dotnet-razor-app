@@ -51,6 +51,22 @@ public sealed class ServiceHubFeedbackSinkTests
     }
 
     [Fact]
+    public async Task A_successful_status_without_the_documented_shape_is_not_reported_as_sent()
+    {
+        // Codex review on #5: a proxy's 200 page or a changed upstream must not become "Thank you, sent".
+        using var okEmpty = new FakeHandler(HttpStatusCode.OK, "{}");
+        var fromEmpty = await Sink(okEmpty).SendAsync(Ticket);
+        Assert.False(fromEmpty.Accepted);
+        Assert.Contains("without a ticket number", fromEmpty.Error, StringComparison.Ordinal);
+
+        using var createdNoId = new FakeHandler(HttpStatusCode.Created, """{"url":"https://helpdesk.example.org/x"}""");
+        Assert.False((await Sink(createdNoId).SendAsync(Ticket)).Accepted);
+
+        using var okWithId = new FakeHandler(HttpStatusCode.OK, """{"ticketId":7}""");
+        Assert.False((await Sink(okWithId).SendAsync(Ticket)).Accepted); // 201 is the contract, not any 2xx
+    }
+
+    [Fact]
     public async Task A_ticket_without_a_screenshot_omits_the_field()
     {
         using var handler = new FakeHandler(HttpStatusCode.Created, """{"ticketId":1}""");

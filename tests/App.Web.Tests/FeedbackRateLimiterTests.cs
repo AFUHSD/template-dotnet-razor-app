@@ -52,6 +52,26 @@ public sealed class FeedbackRateLimiterTests
     }
 
     [Fact]
+    public void A_hammering_client_does_not_grow_memory_and_stays_locked_out()
+    {
+        // Codex review on #5: every refused attempt used to enqueue a timestamp for the whole window.
+        var clock = new FakeTime();
+        var limiter = new FeedbackRateLimiter(clock);
+
+        for (var i = 0; i < 500; i++)
+        {
+            limiter.TryAcquire("script@example.org", 5, Window);
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.True(limiter.TrackedAttempts("script@example.org") <= 6);
+        Assert.False(limiter.TryAcquire("script@example.org", 5, Window)); // still locked out while attempts keep coming
+
+        clock.Advance(Window);
+        Assert.True(limiter.TryAcquire("script@example.org", 5, Window)); // and free again once it stops
+    }
+
+    [Fact]
     public void A_zero_limit_or_a_zero_window_refuses_everything()
     {
         var limiter = new FeedbackRateLimiter(new FakeTime());

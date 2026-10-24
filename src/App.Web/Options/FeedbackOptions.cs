@@ -47,6 +47,11 @@ public sealed class FeedbackOptions
 
     public bool IsServiceHubConfigured => ServiceHubIntakeUrl is not null;
 
+    /// <summary>True when the intake URL is absolute and http or https: the only shape the sink can send to.</summary>
+    public bool HasUsableIntakeUrl =>
+        ServiceHubIntakeUrl is { IsAbsoluteUri: true } url
+        && (url.Scheme == Uri.UriSchemeHttps || url.Scheme == Uri.UriSchemeHttp);
+
     /// <summary>Resolves the tri-state flag for the current environment.</summary>
     public bool IsEnabled(IHostEnvironment environment)
     {

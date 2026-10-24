@@ -149,6 +149,18 @@ public sealed partial class FeedbackEndpointTests
     }
 
     [Fact]
+    public void A_relative_or_non_http_intake_url_is_refused_at_startup()
+    {
+        // Codex review on #5: a relative URL selected the HTTP sink and then 500'd on every submission.
+        using var relative = new AppFactory().With("Feedback:ServiceHubIntakeUrl", "api/intake/feedback").With("Feedback:ServiceHubIntakeKey", "k");
+        var ex = Assert.ThrowsAny<Exception>(() => relative.CreateClient());
+        Assert.Contains("Feedback__ServiceHubIntakeUrl", ex.ToString(), StringComparison.Ordinal);
+
+        using var file = new AppFactory().With("Feedback:ServiceHubIntakeUrl", "file:///c:/intake").With("Feedback:ServiceHubIntakeKey", "k");
+        Assert.ThrowsAny<Exception>(() => file.CreateClient());
+    }
+
+    [Fact]
     public async Task A_valid_screenshot_is_accepted_and_anything_else_is_not()
     {
         var (factory, events) = Hosted();

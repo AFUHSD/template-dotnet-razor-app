@@ -32,7 +32,24 @@ public sealed class FeedbackRateLimiter(TimeProvider time)
 
             var allowed = queue.Count < maxPerWindow;
             queue.Enqueue(now);
+
+            // Bounded memory: a script hammering a refused identity must not grow the queue for the whole
+            // window. Keeping the newest max+1 timestamps preserves the lockout (the count in the window
+            // stays at or above the limit while attempts keep arriving) and drops only entries that would
+            // have expired first anyway.
+            while (queue.Count > maxPerWindow + 1)
+                queue.Dequeue();
+
             return allowed;
         }
+    }
+
+    /// <summary>How many timestamps are held for an identity. For tests of the bound; not a rate.</summary>
+    internal int TrackedAttempts(string identity)
+    {
+        if (!_submissions.TryGetValue(identity, out var queue))
+            return 0;
+        lock (queue)
+            return queue.Count;
     }
 }
