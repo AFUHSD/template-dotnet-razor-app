@@ -12,7 +12,8 @@ namespace App.Web.Services.Health;
 public sealed class ConfigurationHealthCheck(
     IConfiguration configuration,
     IOptions<AuthOptions> auth,
-    IOptions<AccessOptions> access) : IHealthCheck
+    IOptions<AccessOptions> access,
+    IOptions<FeedbackOptions> feedback) : IHealthCheck
 {
     public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
@@ -27,6 +28,10 @@ public sealed class ConfigurationHealthCheck(
         // TODO: when you replace the example access rule, check its settings here instead.
         if (string.IsNullOrWhiteSpace(access.Value.AllowedEmailDomain))
             missing.Add("Access__AllowedEmailDomain");
+
+        // An intake URL without its key would fail every submission at runtime with nothing in readiness.
+        if (feedback.Value.IsServiceHubConfigured && string.IsNullOrWhiteSpace(feedback.Value.ServiceHubIntakeKey))
+            missing.Add("Feedback__ServiceHubIntakeKey");
 
         if (missing.Count > 0)
             return Task.FromResult(HealthCheckResult.Unhealthy("Missing configuration: " + string.Join(", ", missing)));
