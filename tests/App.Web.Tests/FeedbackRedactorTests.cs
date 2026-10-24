@@ -45,7 +45,7 @@ public sealed class FeedbackRedactorTests
         var redacted = FeedbackRedactor.Redact(route);
 
         Assert.DoesNotContain("t0ps3cret", redacted, StringComparison.Ordinal);
-        Assert.Contains("returnUrl=%2Fhome", redacted, StringComparison.Ordinal);
+        Assert.Contains("returnUrl=/home", redacted, StringComparison.Ordinal); // decoded, kept
         Assert.Contains("page=2", redacted, StringComparison.Ordinal);
     }
 
@@ -87,6 +87,26 @@ public sealed class FeedbackRedactorTests
         Assert.DoesNotContain("987654321", redacted, StringComparison.Ordinal);
         Assert.Contains("room 204", redacted, StringComparison.Ordinal);
         Assert.Contains("page 3", redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Percent_encoding_does_not_hide_an_email_a_token_or_a_number()
+    {
+        // Codex review on #5: RouteOf hands over the ESCAPED path and query, so "@" arrives as %40 and a token
+        // inside an encoded returnUrl never meets the query-secret pattern unless the text is decoded first.
+        var route = "/my-app/open?who=person%40example.org&returnUrl=%2Fhome%3Faccess_token%3Dt0ps3cret%26page%3D2&id=%2512345";
+
+        var redacted = FeedbackRedactor.Redact(route);
+
+        Assert.DoesNotContain("person", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("example.org", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("t0ps3cret", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("12345", redacted, StringComparison.Ordinal);
+        Assert.Contains("page=2", redacted, StringComparison.Ordinal);
+        Assert.Contains("returnUrl=/home?", redacted, StringComparison.Ordinal); // the shape survives, the secret does not
+
+        // Double-encoded "@" (%2540) is still found: decoding repeats until the text is stable.
+        Assert.DoesNotContain("example.org", FeedbackRedactor.Redact("/x?e=person%2540example.org"), StringComparison.Ordinal);
     }
 
     [Fact]

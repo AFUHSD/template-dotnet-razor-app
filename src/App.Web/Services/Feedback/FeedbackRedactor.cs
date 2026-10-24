@@ -24,13 +24,19 @@ public static partial class FeedbackRedactor
     public const string RedactedEmail = "[email]";
     public const string RedactedNumber = "[number]";
 
-    /// <summary>Returns the text with every match replaced. Null or empty comes back unchanged.</summary>
+    /// <summary>
+    /// Returns the text with every match replaced. Null or empty comes back unchanged. Percent-encoding is
+    /// undone first (repeatedly, so a double-encoded value cannot hide an <c>@</c> or an <c>=</c> from the
+    /// patterns); the output is for a person to read in a ticket, not for a parser, so losing the encoding
+    /// costs nothing.
+    /// </summary>
     public static string Redact(string? text)
     {
         if (string.IsNullOrEmpty(text))
             return text ?? "";
 
-        var result = ConnectionStringFragment().Replace(text, "$1=" + Redacted);
+        var result = Decode(text);
+        result = ConnectionStringFragment().Replace(result, "$1=" + Redacted);
         result = BearerToken().Replace(result, "$1" + Redacted);
         result = JsonWebToken().Replace(result, Redacted);
         result = SecretQueryValue().Replace(result, "$1=" + Redacted);
@@ -38,6 +44,21 @@ public static partial class FeedbackRedactor
         result = EmailAddress().Replace(result, RedactedEmail);
         result = IdentifierShapedNumber().Replace(result, RedactedNumber);
         return result;
+    }
+
+    /// <summary>Unescapes %XX sequences until the text stops changing (bounded). '+' is left alone: it is legitimate in an email's local part.</summary>
+    internal static string Decode(string text)
+    {
+        var current = text;
+        for (var pass = 0; pass < 4; pass++)
+        {
+            var next = Uri.UnescapeDataString(current);
+            if (next == current)
+                break;
+            current = next;
+        }
+
+        return current;
     }
 
     // Keys from SqlClient, ODBC and OLE DB connection strings. The value runs to the next ';', '&' or whitespace.

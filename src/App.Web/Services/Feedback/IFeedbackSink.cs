@@ -1,5 +1,3 @@
-using App.Web.Services.Events;
-
 namespace App.Web.Services.Feedback;
 
 /// <summary>
@@ -51,27 +49,29 @@ public static class FeedbackLimits
 }
 
 /// <summary>
-/// Default sink when no intake URL is configured: the whole ticket (minus screenshot bytes) goes to the
-/// audit-event store as one <c>feedback-message</c> event. Nothing is dropped; a person reading the event log
-/// sees exactly what would have been filed.
+/// Default sink when no intake URL is configured: the ticket (minus screenshot bytes) goes to the diagnostic
+/// log through <see cref="ILogger"/> as one structured Information entry, so nothing is dropped while the help
+/// desk is not yet wired up.
+///
+/// Not the audit-event store on purpose. <c>AppEvent.Detail</c> is contractually free of student data, and the
+/// redactor cannot recognise a student's name typed into the message despite the warning. The diagnostic log
+/// is where free text already lives; the audit trail gets the <c>feedback</c> event the endpoint writes, which
+/// carries the redacted route and never the message.
 /// </summary>
-public sealed class LoggingFeedbackSink(IEventLog events) : IFeedbackSink
+public sealed partial class LoggingFeedbackSink(ILogger<LoggingFeedbackSink> logger) : IFeedbackSink
 {
-    public const string Name = "event-log";
+    public const string Name = "log";
 
-    public async Task<FeedbackSinkResult> SendAsync(FeedbackTicket ticket, CancellationToken ct = default)
+    public Task<FeedbackSinkResult> SendAsync(FeedbackTicket ticket, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(ticket);
-        await events.WriteAsync(new AppEvent("feedback-message", "Logged", ticket.UserEmail, new
-        {
-            app = ticket.App,
-            appVersion = ticket.AppVersion,
-            route = ticket.Route,
-            userAgent = ticket.UserAgent,
-            message = ticket.Message,
-            screenshotBytes = ticket.ScreenshotPng?.Length ?? 0,
-            submittedUtc = ticket.SubmittedUtc,
-        }), ct);
-        return FeedbackSinkResult.Ok(Name, "logged");
+        LogFeedback(logger, ticket.App, ticket.AppVersion, ticket.UserEmail, ticket.Route, ticket.UserAgent,
+            ticket.ScreenshotPng?.Length ?? 0, ticket.Message);
+        return Task.FromResult(FeedbackSinkResult.Ok(Name, "logged"));
     }
+
+    [LoggerMessage(Level = LogLevel.Information,
+        Message = "Feedback for {App} {AppVersion} from {UserEmail} on {Route} ({UserAgent}; screenshot {ScreenshotBytes} bytes): {Message}")]
+    private static partial void LogFeedback(ILogger logger, string app, string appVersion, string userEmail, string route,
+        string userAgent, int screenshotBytes, string message);
 }

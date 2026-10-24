@@ -52,10 +52,13 @@ public sealed class FeedbackRateLimiterTests
     }
 
     [Fact]
-    public void A_zero_limit_refuses_everything()
+    public void A_zero_limit_or_a_zero_window_refuses_everything()
     {
         var limiter = new FeedbackRateLimiter(new FakeTime());
         Assert.False(limiter.TryAcquire("person@example.org", 0, Window));
+        // A zero window would otherwise expire every earlier attempt and admit everything (Codex review on #5).
+        Assert.False(limiter.TryAcquire("person@example.org", 5, TimeSpan.Zero));
+        Assert.False(limiter.TryAcquire("person@example.org", 5, TimeSpan.FromMinutes(-1)));
     }
 
     private sealed class FakeTime : TimeProvider

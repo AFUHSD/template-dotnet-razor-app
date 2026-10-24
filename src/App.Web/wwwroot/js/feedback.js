@@ -175,9 +175,17 @@
                 body: JSON.stringify({ message: text, screenshotDataUrl: screenshot })
             });
         }).then(function (response) {
+            // An expired session is answered with a redirect to sign-in, which fetch follows to a 200 HTML
+            // page. That is not success: the endpoint never saw the message.
+            if (response.redirected) {
+                throw new Error("Your session has ended. Reload the page, sign in, and send again.");
+            }
             return response.json().catch(function () { return {}; }).then(function (body) {
                 if (!response.ok) {
                     throw new Error(body.error || ("Your feedback could not be sent (" + response.status + ")."));
+                }
+                if (!body || typeof body.sink !== "string") {
+                    throw new Error("The server answered in an unexpected way. Reload the page and try again.");
                 }
                 var reference = body.reference && body.reference !== "logged" ? " Ticket " + body.reference + "." : "";
                 setStatus("Thank you. Your feedback was sent." + reference);

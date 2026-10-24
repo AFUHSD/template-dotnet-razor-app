@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using App.Web.Services.Events;
 using App.Web.Services.Feedback;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace App.Web.Tests;
 
@@ -82,7 +83,7 @@ public sealed partial class FeedbackEndpointTests
     }
 
     [Fact]
-    public async Task A_valid_post_reaches_the_event_log_with_the_route_redacted()
+    public async Task A_valid_post_writes_one_audit_event_with_the_route_redacted_and_no_message_text()
     {
         var (factory, events) = Hosted();
         using var f = factory;
@@ -96,20 +97,55 @@ public sealed partial class FeedbackEndpointTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(LoggingFeedbackSink.Name, body.GetProperty("sink").GetString());
+        Assert.Equal("logged", body.GetProperty("reference").GetString());
 
-        var message = Assert.Single(events.Written, e => e.Action == "feedback-message");
-        var detail = JsonSerializer.Serialize(message.Detail);
-        Assert.Equal("developer@example.org", message.Identity);
+        var audit = Assert.Single(events.Written);
+        Assert.Equal("feedback", audit.Action);
+        Assert.Equal("Sent", audit.Status);
+        Assert.Equal("developer@example.org", audit.Identity);
+        var detail = JsonSerializer.Serialize(audit.Detail);
         Assert.Contains("/my-app/students/[number]/edit?", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("12345", detail, StringComparison.Ordinal);
         Assert.DoesNotContain("abc123", detail, StringComparison.Ordinal);
         Assert.Contains("tab=2", detail, StringComparison.Ordinal);
-        Assert.Contains("The Save button does nothing.", detail, StringComparison.Ordinal);
         Assert.Contains("\"app\":\"My App\"", detail, StringComparison.Ordinal);
+        Assert.Contains("\"sink\":\"log\"", detail, StringComparison.Ordinal);
+        Assert.Contains("\"messageLength\":", detail, StringComparison.Ordinal);
+        // The audit trail is contractually free of student data and the redactor cannot see a name, so the
+        // message never goes there (Codex review on #5). It goes to the diagnostic log with the fallback sink.
+        Assert.DoesNotContain("Save button", detail, StringComparison.Ordinal);
+        Assert.DoesNotContain("on screen", detail, StringComparison.Ordinal);
+    }
 
-        var audit = Assert.Single(events.Written, e => e.Action == "feedback");
-        Assert.Equal("Sent", audit.Status);
-        Assert.DoesNotContain("Save button", JsonSerializer.Serialize(audit.Detail), StringComparison.Ordinal); // audit row carries no message text
+    [Fact]
+    public async Task The_fallback_sink_writes_the_whole_ticket_to_the_diagnostic_log()
+    {
+        var lines = new List<string>();
+        using var loggers = LoggerFactory.Create(b => b.AddProvider(new CapturingLoggerProvider(lines)));
+        var sink = new LoggingFeedbackSink(loggers.CreateLogger<LoggingFeedbackSink>());
+        var ticket = new FeedbackTicket("My App", "1.0.0+abc", "/my-app/page?tab=2", "person@example.org", "TestBrowser/1.0",
+            "The Save button does nothing.", new byte[64], DateTimeOffset.UnixEpoch);
+
+        var result = await sink.SendAsync(ticket);
+
+        Assert.True(result.Accepted);
+        Assert.Equal("logged", result.Reference);
+        var line = Assert.Single(lines);
+        Assert.Contains("My App 1.0.0+abc", line, StringComparison.Ordinal);
+        Assert.Contains("person@example.org", line, StringComparison.Ordinal);
+        Assert.Contains("/my-app/page?tab=2", line, StringComparison.Ordinal);
+        Assert.Contains("screenshot 64 bytes", line, StringComparison.Ordinal);
+        Assert.Contains("The Save button does nothing.", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_zero_rate_limit_window_is_refused_at_startup_rather_than_silently_disabling_the_limit()
+    {
+        using var factory = new AppFactory().With("Feedback:WindowMinutes", "0");
+
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+
+        Assert.Contains("Feedback__WindowMinutes", ex.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -122,7 +158,7 @@ public sealed partial class FeedbackEndpointTests
 
         using var ok = Post(token, new { message = "see picture", screenshotDataUrl = TinyPng });
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(ok)).StatusCode);
-        Assert.Contains("\"screenshotBytes\":64", JsonSerializer.Serialize(events.Written.Single(e => e.Action == "feedback-message").Detail), StringComparison.Ordinal);
+        Assert.Contains("\"screenshot\":true", JsonSerializer.Serialize(events.Written.Single(e => e.Action == "feedback").Detail), StringComparison.Ordinal);
 
         var jpeg = "data:image/jpeg;base64," + Convert.ToBase64String(new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4, 5, 6 });
         using var wrongType = Post(token, new { message = "see picture", screenshotDataUrl = jpeg });
@@ -138,7 +174,7 @@ public sealed partial class FeedbackEndpointTests
         var tooBigResponse = await client.SendAsync(tooBig);
         Assert.Equal(HttpStatusCode.BadRequest, tooBigResponse.StatusCode);
         Assert.Contains("1 MB", await tooBigResponse.Content.ReadAsStringAsync(), StringComparison.Ordinal);
-        Assert.Single(events.Written, e => e.Action == "feedback-message"); // only the first one was filed
+        Assert.Single(events.Written, e => e.Action == "feedback"); // only the first one was filed
     }
 
     [Fact]
@@ -207,7 +243,7 @@ public sealed partial class FeedbackEndpointTests
         var response = await client.SendAsync(sixth);
 
         Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
-        Assert.Equal(5, events.Written.Count(e => e.Action == "feedback-message"));
+        Assert.Equal(5, events.Written.Count(e => e.Action == "feedback" && e.Status == "Sent")); // the sixth never reached the sink
     }
 
     [Fact]
@@ -306,6 +342,23 @@ public sealed partial class FeedbackEndpointTests
         {
             lock (_written) _written.Add(appEvent);
             return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>Captures formatted log lines so the fallback sink's output can be asserted.</summary>
+    private sealed class CapturingLoggerProvider(List<string> lines) : ILoggerProvider
+    {
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(lines);
+        public void Dispose() { }
+
+        private sealed class CapturingLogger(List<string> lines) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                lock (lines) lines.Add(formatter(state, exception));
+            }
         }
     }
 

@@ -20,7 +20,7 @@ Created by Agua Fria Union High School District for our own apps, and written to
   (`IEventLog`) with a no-op default, ready for your organization's central event store.
 - **Embedded feedback control** (`Pages/Shared/_Feedback.cshtml`, `Services/Feedback/`): a Feedback button on
   every page that files what the person typed, with the page they were on, as a help-desk ticket through the
-  help desk's HTTP intake; or to the audit-event sink until a help desk is configured. Behind a feature flag,
+  help desk's HTTP intake; or to the diagnostic log until a help desk is configured. Behind a feature flag,
   anti-forgery, a size cap and a per-person rate limit, with a redactor that keeps tokens, connection
   strings, email addresses and student numbers out of the ticket. See [Feedback control](#feedback-control).
 - **Sub-path hosting** (`PathBase`) with a test that fails if any link escapes to the parent site.
@@ -79,7 +79,7 @@ Created by Agua Fria Union High School District for our own apps, and written to
 | `Access__AllowedEmailDomain` | example rule | Replace with your own rule's settings |
 | `Feedback__Enabled` | no | Show the Feedback control. Unset = Development only; set `true` to switch it on for a deployed app |
 | `Feedback__AppName` | with the control | The name the help desk files tickets against |
-| `Feedback__ServiceHubIntakeUrl` | no | The help desk's intake endpoint. Unset = feedback goes to `IEventLog` instead |
+| `Feedback__ServiceHubIntakeUrl` | no | The help desk's intake endpoint. Unset = feedback goes to the diagnostic log instead |
 | `Feedback__ServiceHubIntakeKey` | with the URL | Shared key sent as a bearer token; readiness names it when missing |
 | `Feedback__AllowScreenshots` | no | `false` removes the screenshot option entirely (default `true`) |
 | `Feedback__MaxPerWindow`, `Feedback__WindowMinutes` | no | Per-person rate limit (default 5 per 10 minutes) |
@@ -100,10 +100,12 @@ browser's user-agent string, the message, and the screenshot if one was taken. *
 replay, cookies, headers, form contents, or anything from other tabs.
 
 **Redaction.** Before anything leaves the app, the route and the message go through `FeedbackRedactor`, which
-replaces connection-string fragments, bearer tokens and JWTs, secret-shaped query parameters (`token`, `key`,
-`sig`, `code`, ...), opaque strings of 32+ token characters, email addresses, and any run of 5 to 9 digits
-(student numbers, state ids). It is deliberately over-eager: a redacted zip code costs nothing. The tests in
-`FeedbackRedactorTests` plant each of these in a route and assert they are gone.
+first undoes percent-encoding (repeatedly, so `%2540` cannot hide an `@`) and then replaces connection-string
+fragments, bearer tokens and JWTs, secret-shaped query parameters (`token`, `key`, `sig`, `code`, ...), opaque
+strings of 32+ token characters, email addresses, and any run of 5 to 9 digits (student numbers, state ids).
+It is deliberately over-eager: a redacted zip code costs nothing. It cannot recognise a student's **name**,
+which is why the dialog and the Help page tell people not to type one. The tests in `FeedbackRedactorTests`
+plant each of these in a route and assert they are gone.
 
 **Screenshots.** The screenshot is taken with the browser's own screen-sharing picker
 (`getDisplayMedia`), so the person chooses what to share and the browser shows its own consent prompt.
@@ -120,14 +122,20 @@ whether screenshots should be allowed at all**; `Feedback__AllowScreenshots=fals
   a ticket the help desk did not create itself notifies nobody. The intake files the ticket as `userEmail`
   so the help desk talks to the reporter directly. The reference implementation is ServiceHub's
   `POST /api/intake/feedback`.
-- `LoggingFeedbackSink` is the default. It writes the whole ticket (minus screenshot bytes) to `IEventLog` as
-  one `feedback-message` event, so nothing is lost while the help desk is not yet wired up.
+- `LoggingFeedbackSink` is the default. It writes the whole ticket (minus screenshot bytes) to the diagnostic
+  log (`ILogger`, Information) as one structured entry, so nothing is lost while the help desk is not yet
+  wired up. Not to the audit-event store: `AppEvent.Detail` is contractually free of student data and the
+  redactor cannot recognise a name.
 
-**EventLogs rows.** Whichever sink is in use, every submission writes one `feedback` event through
-`IEventLog` with status `Sent` or `Failed`, the identity, and a detail object of `app`, `appVersion`,
-`route` (redacted), `sink`, `reference` (the ticket number, or `logged`), `error`, `screenshot` (bool) and
-`messageLength`. The message text itself is only in the `feedback-message` event the logging sink writes.
-Implement `IEventLog` against your organization's store and both rows land there.
+**The EventLogs row.** Whichever sink is in use, every submission writes exactly one `feedback` event
+through `IEventLog` with status `Sent` or `Failed`, the identity, and a detail object of `app`, `appVersion`,
+`route` (redacted), `sink` (`servicehub` or `log`), `reference` (the ticket number, or `logged`), `error`,
+`screenshot` (bool) and `messageLength`. **Never the message text.** Implement `IEventLog` against your
+organization's store and the row lands there.
+
+**Rate-limit settings are validated at startup.** `Feedback__MaxPerWindow` and `Feedback__WindowMinutes`
+must both be above zero; a zero window would admit everything, so the process refuses to start and names
+the keys instead.
 
 **Feature flag.** `Feedback__Enabled` unset means on in Development and off everywhere else, so a deployed app
 shows the control only when the host says `true`. Rollback is removing the flag: the partial, the endpoint and

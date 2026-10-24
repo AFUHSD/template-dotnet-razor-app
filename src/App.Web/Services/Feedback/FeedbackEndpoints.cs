@@ -113,7 +113,8 @@ public static partial class FeedbackEndpoints
         var result = await sink.SendAsync(ticket, ct);
 
         // The audit row every app writes, whichever sink is in use. Detail never contains the message or the
-        // screenshot: the route is already redacted, and the message lives with the ticket.
+        // screenshot: AppEvent.Detail is contractually free of student data, the redactor cannot recognise a
+        // name, and the message lives with the ticket (or in the diagnostic log for the fallback sink).
         await events.SafeWriteAsync(new AppEvent("feedback", result.Accepted ? "Sent" : "Failed", identity, new
         {
             app = ticket.App,

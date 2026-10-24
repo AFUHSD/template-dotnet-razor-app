@@ -14,7 +14,13 @@ var builder = WebApplication.CreateBuilder(args);
 // (Section__Key). Nothing about a particular server or organization belongs in source.
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<AccessOptions>(builder.Configuration.GetSection(AccessOptions.SectionName));
-builder.Services.Configure<FeedbackOptions>(builder.Configuration.GetSection(FeedbackOptions.SectionName));
+// Validated at startup: a zero window or count would silently switch the rate limit off, so it is refused
+// loudly instead (the process does not start, and the message names the keys).
+builder.Services.AddOptions<FeedbackOptions>()
+    .Bind(builder.Configuration.GetSection(FeedbackOptions.SectionName))
+    .Validate(o => o.MaxPerWindow > 0 && o.WindowMinutes > 0,
+        "Feedback__MaxPerWindow and Feedback__WindowMinutes must both be greater than zero.")
+    .ValidateOnStart();
 var auth =builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
 
 // --- Authentication: identity only, from the platform cookie ------------------------------------------------
@@ -83,7 +89,7 @@ builder.Services.AddSingleton<IEventLog, NoOpEventLog>();
 // --- Embedded feedback control: a help-desk ticket from any page -------------------------------------------
 // Shown when Feedback:Enabled resolves true (default: Development only). With an intake URL the ticket goes
 // to the help desk over HTTP (never a direct database insert: those tickets notify nobody); without one it is
-// written to IEventLog, so the control can be tried before the help desk is wired up.
+// written to the diagnostic log, so the control can be tried before the help desk is wired up.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<FeedbackRateLimiter>();
 var feedback = builder.Configuration.GetSection(FeedbackOptions.SectionName).Get<FeedbackOptions>() ?? new FeedbackOptions();

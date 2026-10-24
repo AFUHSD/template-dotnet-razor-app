@@ -18,7 +18,9 @@ public sealed class FeedbackRateLimiter(TimeProvider time)
     public bool TryAcquire(string identity, int maxPerWindow, TimeSpan window)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(identity);
-        if (maxPerWindow <= 0)
+        // A zero or negative window would expire every earlier attempt and admit everything. Options are
+        // validated at startup; this is the belt to that suspender.
+        if (maxPerWindow <= 0 || window <= TimeSpan.Zero)
             return false;
 
         var now = time.GetUtcNow();
