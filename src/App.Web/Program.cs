@@ -1,6 +1,7 @@
 using App.Web.Options;
 using App.Web.Services.Access;
 using App.Web.Services.Events;
+using App.Web.Services.Feedback;
 using App.Web.Services.Health;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -13,7 +14,17 @@ var builder = WebApplication.CreateBuilder(args);
 // (Section__Key). Nothing about a particular server or organization belongs in source.
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection(AuthOptions.SectionName));
 builder.Services.Configure<AccessOptions>(builder.Configuration.GetSection(AccessOptions.SectionName));
-var auth = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+// Validated at startup, loudly (the process does not start, and the message names the key): a zero window
+// or count would silently switch the rate limit off, and a relative or non-HTTP intake URL would select the
+// HTTP sink and then fail every submission with a 500.
+builder.Services.AddOptions<FeedbackOptions>()
+    .Bind(builder.Configuration.GetSection(FeedbackOptions.SectionName))
+    .Validate(o => o.MaxPerWindow > 0 && o.WindowMinutes > 0,
+        "Feedback__MaxPerWindow and Feedback__WindowMinutes must both be greater than zero.")
+    .Validate(o => o.ServiceHubIntakeUrl is null || o.HasUsableIntakeUrl,
+        "Feedback__ServiceHubIntakeUrl must be an absolute http or https URL.")
+    .ValidateOnStart();
+var auth =builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
 
 // --- Authentication: identity only, from the platform cookie ------------------------------------------------
 if (auth.UsePlatformLogin)
@@ -78,6 +89,18 @@ builder.Services.AddRazorPages(options =>
 // --- Audit events: a central store behind an interface; the no-op is the default -------------------------
 builder.Services.AddSingleton<IEventLog, NoOpEventLog>();
 
+// --- Embedded feedback control: a help-desk ticket from any page -------------------------------------------
+// Shown when Feedback:Enabled resolves true (default: Development only). With an intake URL the ticket goes
+// to the help desk over HTTP (never a direct database insert: those tickets notify nobody); without one it is
+// written to the diagnostic log, so the control can be tried before the help desk is wired up.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<FeedbackRateLimiter>();
+var feedback = builder.Configuration.GetSection(FeedbackOptions.SectionName).Get<FeedbackOptions>() ?? new FeedbackOptions();
+if (feedback.IsServiceHubConfigured)
+    builder.Services.AddHttpClient<IFeedbackSink, ServiceHubFeedbackSink>(client => client.Timeout = TimeSpan.FromSeconds(10));
+else
+    builder.Services.AddSingleton<IFeedbackSink, LoggingFeedbackSink>();
+
 // --- Health ----------------------------------------------------------------------------------------------
 builder.Services.AddHealthChecks()
     .AddCheck<ConfigurationHealthCheck>("configuration", tags: [HealthEndpoints.ReadyTag])
@@ -104,6 +127,7 @@ app.UseMiddleware<AccessResolutionMiddleware>();
 app.UseAuthorization();
 
 app.MapAppHealthChecks();
+app.MapFeedbackEndpoint();
 app.MapRazorPages();
 
 app.Run();

@@ -54,6 +54,73 @@ main:focus { outline: none; } /* Focused programmatically by the skip link only.
 
 .site-footer { padding: 1rem; color: var(--muted); border-top: 1px solid var(--surface); }
 
+/* Embedded feedback control (_Feedback.cshtml). The button is text, not an icon, so it needs no label;
+   the dialog is a native <dialog> so the focus trap and Esc come from the browser. Colours are the
+   site tokens: accent on white 8.0:1, error text #a3261e on white 6.4:1, warning text uses --text. */
+.feedback-button {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 90;
+    padding: 0.6rem 1rem;
+    border: 2px solid var(--accent);
+    border-radius: 0.5rem;
+    background: var(--bg);
+    color: var(--accent);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+.feedback-button:hover { background: var(--surface); }
+
+.feedback-dialog {
+    box-sizing: border-box; /* width includes padding and border, so it fits a 320px viewport */
+    width: min(28rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    padding: 1.25rem;
+    border: 1px solid var(--muted);
+    border-radius: 0.5rem;
+    color: var(--text);
+    background: var(--bg);
+}
+.feedback-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+.feedback-dialog h2 { margin-top: 0; }
+.feedback-field { margin: 1rem 0; }
+.feedback-field label { display: block; font-weight: 700; margin-bottom: 0.25rem; }
+.feedback-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.5rem;
+    border: 1px solid var(--muted);
+    border-radius: 0.25rem;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+}
+.feedback-check { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.5rem; align-items: start; }
+.feedback-check input { width: 1.25rem; height: 1.25rem; margin: 0.15rem 0 0; }
+.feedback-check label { margin: 0; }
+.feedback-check .feedback-warning { grid-column: 2; margin: 0; }
+.feedback-hint { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.9rem; }
+.feedback-warning { padding: 0.5rem 0.75rem; border-left: 4px solid var(--focus); background: var(--surface); font-size: 0.95rem; }
+.feedback-error { color: #a3261e; font-weight: 700; min-height: 1.5em; margin: 0.5rem 0 0; }
+.feedback-error:empty { display: none; }
+.feedback-status { margin: 0.5rem 0 0; font-weight: 700; }
+.feedback-status:empty { display: none; }
+.feedback-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+.feedback-actions button {
+    padding: 0.6rem 1.25rem;
+    border: 2px solid var(--accent);
+    border-radius: 0.5rem;
+    background: var(--accent);
+    color: var(--bg);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+.feedback-actions button:disabled { opacity: 0.6; cursor: wait; }
+.feedback-actions .feedback-secondary { background: var(--bg); color: var(--accent); }
+
 @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

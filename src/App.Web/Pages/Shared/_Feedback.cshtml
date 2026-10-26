@@ -1,0 +1,60 @@
+@using App.Web.Options
+@using App.Web.Services.Feedback
+@using Microsoft.Extensions.Options
+@inject IOptions<FeedbackOptions> Feedback
+@*
+    The embedded feedback control: a button fixed to the corner of every page and a modal dialog.
+    Rendered by _Layout only when Feedback:Enabled resolves true. The button starts hidden and is shown by
+    feedback.js, because without script the dialog cannot open or send.
+
+    Accessibility (WCAG 2.1 AA): native <dialog> + showModal() gives a focus trap, Esc to close and inert
+    content behind; aria-labelledby/aria-describedby name and describe it; every field has a <label>;
+    the counter and the status are live regions; errors are text, never colour alone; focus returns to the
+    button on close (feedback.js). Visible focus comes from the site-wide :focus-visible rule.
+*@
+<button type="button" class="feedback-button" id="feedback-open" aria-haspopup="dialog" hidden>
+    Feedback
+</button>
+
+<dialog id="feedback-dialog" class="feedback-dialog" aria-labelledby="feedback-title" aria-describedby="feedback-intro">
+    <form id="feedback-form" method="post" action="@Url.Content("~" + FeedbackEndpoints.Route)" novalidate>
+        @Html.AntiForgeryToken()
+        <h2 id="feedback-title">Send feedback</h2>
+        <p id="feedback-intro">
+            Tell us what went wrong or what would help, and we will file it with this page attached. Do not
+            include student names or numbers; the page you are on is enough.
+        </p>
+
+        <div class="feedback-field">
+            <label for="feedback-message">What happened?</label>
+            <textarea id="feedback-message" name="message" rows="5" required maxlength="@FeedbackLimits.MaxMessageChars"
+                      aria-describedby="feedback-count feedback-error"></textarea>
+            <p id="feedback-count" class="feedback-hint" aria-live="polite">
+                @FeedbackLimits.MaxMessageChars.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) characters left
+            </p>
+        </div>
+
+        @if (Feedback.Value.AllowScreenshots)
+        {
+            <div class="feedback-field feedback-check">
+                <input type="checkbox" id="feedback-screenshot" name="screenshot" aria-describedby="feedback-screenshot-warning" />
+                <label for="feedback-screenshot">Include a screenshot of this page</label>
+                <p id="feedback-screenshot-warning" class="feedback-warning">
+                    <strong>Warning:</strong> a screenshot includes everything on your screen, which can include
+                    student data. Your browser will ask you to choose what to share; share this tab only, and
+                    leave this unticked if any student information is showing.
+                </p>
+            </div>
+        }
+
+        <p id="feedback-error" class="feedback-error" role="alert"></p>
+        <p id="feedback-status" class="feedback-status" role="status" aria-live="polite"></p>
+
+        <div class="feedback-actions">
+            <button type="submit" id="feedback-send">Send</button>
+            <button type="button" id="feedback-cancel" class="feedback-secondary">Cancel</button>
+        </div>
+    </form>
+</dialog>
+
+<script src="~/js/feedback.js" asp-append-version="true" defer></script>

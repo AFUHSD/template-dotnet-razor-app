@@ -6,7 +6,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <!-- Transitive under Microsoft.Data.SqlClient at a version with known advisories (GHSA-846f-f764-76mx,
+         GHSA-2fmv-rv2c-59x7); NuGet audit fails the build on it. Lifted to a patched version until SqlClient
+         references one itself, at which point this line can go. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lets the test project reach internal helpers (the feedback route/PNG parsers) without making them public API. -->
+    <InternalsVisibleTo Include="App.Web.Tests" />
   </ItemGroup>
 
   <ItemGroup>

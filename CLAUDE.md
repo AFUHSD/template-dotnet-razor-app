@@ -19,9 +19,10 @@ dotnet run --project src/App.Web        # http://localhost:5080/my-app/ as devel
 - `Services/Access/`: `IAccessResolver` (per-request roles; `DomainAccessResolver` is the example rule to replace), `AccessResolutionMiddleware`, `DevelopmentAuthenticationHandler`.
 - `Services/Health/`: `/health` (liveness, no checks) and `/health/ready` (`ConfigurationHealthCheck` + `SqlReadinessHealthCheck`).
 - `Services/Events/IEventLog.cs`: audit-event sink; `NoOpEventLog` is the default.
+- `Services/Feedback/`: the embedded feedback control. `FeedbackEndpoints` (`POST /feedback`: flag, anti-forgery header, body cap, PNG check, rate limit), `FeedbackRedactor` (tokens, connection strings, emails, 5-9 digit numbers out of the route and message), `FeedbackRateLimiter`, `IFeedbackSink` with `ServiceHubFeedbackSink` (HTTP intake, never SQL) and `LoggingFeedbackSink` (ILogger, the default; the audit event never carries the message). `Pages/Shared/_Feedback.cshtml` + `wwwroot/js/feedback.js` is the dialog; `_Layout` renders it when `Feedback:Enabled` resolves true (Development only unless set).
 - `Options/`: typed settings. `appsettings.json` = safe defaults only; `appsettings.Example.json` documents every key.
-- `Pages/`: `Index` (example), `Staff/Help` (`/staff/help`), `Denied`, `Error`, `Shared/_Layout`.
-- `tests/App.Web.Tests/`: `PageModelDirectiveTests` (static guard), `HealthEndpointTests`, `IndexPageTests`.
+- `Pages/`: `Index` (example), `Staff/Help` (`/staff/help`), `Denied`, `Error`, `Shared/_Layout`, `Shared/_Feedback`.
+- `tests/App.Web.Tests/`: `PageModelDirectiveTests` (static guard), `HealthEndpointTests`, `IndexPageTests`, `Feedback*Tests` (redactor, rate limiter, endpoint through the pipeline, intake wire shape).
 
 ## Conventions
 - Every setting is config: a typed option, a line in `appsettings.Example.json`, a readiness check if the app cannot work without it. Same PR.
@@ -32,6 +33,7 @@ dotnet run --project src/App.Web        # http://localhost:5080/my-app/ as devel
 - Every feature adds a section to `/staff/help` in the same PR.
 - Accessibility: `lang`, skip link, one `h1`, header/nav/main/footer landmarks, visible `:focus-visible`, 4.5:1 contrast.
 - Readiness output names config KEYS, never values or exception messages (they name servers).
+- Anything that leaves the app for another system (the feedback ticket) goes through `FeedbackRedactor` first and through that system's HTTP surface, never its database.
 
 ## Anti-patterns (fail review)
 - A server name, IP, account name or connection string in source, tests or docs. Placeholders only: `<sql-server>`.
