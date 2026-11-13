@@ -15,7 +15,7 @@
 #
 # Majors are ignored on purpose: a major bump is migration work a person
 # schedules, reviewed in its own PR. Ignore rules do NOT suppress Dependabot
-# security alerts. The cooldown lets a fresh release settle for two days.
+# security alerts. The cooldown lets a fresh release settle for seven days.
 version: 2
 updates:
   - package-ecosystem: "nuget"
@@ -29,7 +29,7 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
     cooldown:
-      default-days: 2
+      default-days: 7
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -42,4 +42,4 @@ updates:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
     cooldown:
-      default-days: 2
+      default-days: 7
